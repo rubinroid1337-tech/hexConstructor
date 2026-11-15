@@ -6,12 +6,16 @@
 
 inline void DrawWire(Vector2 start, Vector2 end, bool state) {
     float offset = std::max(std::abs(end.x - start.x) * 0.5f, 40.0f);
-    Vector2 c1 = { start.x + offset, start.y };
-    Vector2 c2 = { end.x - offset, end.y };
+    Vector2 pts[4] = {
+        start,
+        { start.x + offset, start.y },
+        { end.x - offset, end.y },
+        end
+    };
     Color col = state ? RED : MAROON;
 
-    DrawSplineBezierCubic(start, c1, c2, end, 6.0f, Fade(BLACK, 0.4f));
-    DrawSplineBezierCubic(start, c1, c2, end, 3.5f, col);
+    DrawSplineBezierCubic(pts, 4, 6.0f, Fade(BLACK, 0.4f));
+    DrawSplineBezierCubic(pts, 4, 3.5f, col);
 }
 
 inline void DrawCircuit(const Circuit& circuit, const std::vector<Vector2>& positions) {
