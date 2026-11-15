@@ -15,15 +15,37 @@ struct PinHit {
     Vector2 pos{};
 };
 
+struct Clipboard {
+    std::vector<Vector2> gates;
+    std::vector<Vector2> switches;
+    std::vector<Vector2> leds;
+    std::vector<Wire> wires;
+
+    bool empty() const { return gates.empty() && switches.empty() && leds.empty(); }
+};
+
 struct Editor {
+    Camera2D camera{ {0, 0}, {0, 0}, 0.0f, 1.0f };
+    Selection selection{};
+
+    bool isPanning = false;
+    Vector2 panLastMouse{};
+
+    bool isSelecting = false;
+    Vector2 selectStart{};
+    Rectangle selectBox{};
+
     NodeType dragType = GATE;
     int dragIndex = -1;
     Vector2 dragOffset{};
     Vector2 clickStart{};
 
+    bool isDragging = false;
+    Vector2 dragLastWorld{};
+    Vector2 clickStartWorld{};
+
     PinHit wireStart{}; // Активный пин, от которого сейчас тянется провод
 
-    // Поиск пина под курсором (радиус захвата 10 пикселей для удобства)
     PinHit findPin(Vector2 mouse, const Layout& pos) {
         for (int i = 0; i < (int)pos.gates.size(); ++i) {
             Vector2 p = pos.gates[i];
@@ -81,35 +103,103 @@ struct Editor {
         wireStart.valid = false;
     }
 
-    // Возвращает true, если нажали ESC для закрытия окна (когда провод не тянется)
     bool update(Circuit& c, Layout& pos) {
-        Vector2 mouse = GetMousePosition();
+        Vector2 screenMouse = GetMousePosition();
+        Vector2 mouse = GetScreenToWorld2D(screenMouse, camera);
         bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        bool space = IsKeyDown(KEY_SPACE);
 
-        // 1. Обработка ESC: отменяем тянущийся провод или разрешаем выход из программы
-        if (IsKeyPressed(KEY_ESCAPE)) {
-            if (wireStart.valid) {
-                wireStart.valid = false;
-                return false;
+        bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
+        // Копирование выделенной группы (Ctrl + C)
+        if (ctrl && IsKeyPressed(KEY_C) && !selection.empty()) {
+            clipboard = {};
+            Vector2 center{};
+            int total = 0;
+
+            // Считаем центр масс выделенной группы, чтобы при вставке она появлялась ровно под курсором
+            for (int i : selection.gates)    { center = Vector2Add(center, pos.gates[i]);    total++; }
+            for (int i : selection.switches) { center = Vector2Add(center, pos.switches[i]); total++; }
+            for (int i : selection.leds)     { center = Vector2Add(center, pos.leds[i]);     total++; }
+            center = Vector2Scale(center, 1.0f / total);
+
+            // Сохраняем относительные координаты элементов
+            for (int i : selection.gates)    clipboard.gates.push_back(Vector2Subtract(pos.gates[i], center));
+            for (int i : selection.switches) clipboard.switches.push_back(Vector2Subtract(pos.switches[i], center));
+            for (int i : selection.leds)     clipboard.leds.push_back(Vector2Subtract(pos.leds[i], center));
+
+            // Вспомогательная лямбда для поиска нового локального индекса элемента в буфере
+            auto findLocalIdx = [&](NodeType type, int oldIdx) -> int {
+                const auto& list = (type == GATE) ? selection.gates : (type == SWITCH ? selection.switches : selection.leds);
+                auto it = std::find(list.begin(), list.end(), oldIdx);
+                return (it != list.end()) ? (int)std::distance(list.begin(), it) : -1;
+            };
+
+            // Копируем только внутренние провода (где оба конца попали в выделение)
+            for (const auto& w : c.wires) {
+                int newFrom = findLocalIdx(w.fromType, w.from);
+                int newTo   = findLocalIdx(w.toType, w.to);
+                if (newFrom != -1 && newTo != -1) {
+                    clipboard.wires.push_back({ newFrom, newTo, w.fromType, w.toType, w.pin, false });
+                }
             }
+        }
+
+        if (ctrl && IsKeyPressed(KEY_V) && !clipboard.empty()) {
+            selection.clear();
+
+            int baseGate   = (int)c.gates.size();
+            int baseSwitch = (int)c.switches.size();
+            int baseLed    = (int)c.leds.size();
+
+            for (const auto& rel : clipboard.gates) {
+                selection.gates.push_back((int)c.gates.size());
+                c.gates.push_back({});
+                pos.gates.push_back(Vector2Add(mouse, rel));
+            }
+            for (const auto& rel : clipboard.switches) {
+                selection.switches.push_back((int)c.switches.size());
+                c.switches.push_back({});
+                pos.switches.push_back(Vector2Add(mouse, rel));
+            }
+            for (const auto& rel : clipboard.leds) {
+                selection.leds.push_back((int)c.leds.size());
+                c.leds.push_back({});
+                pos.leds.push_back(Vector2Add(mouse, rel));
+            }
+            for (auto w : clipboard.wires) {
+                w.from += (w.fromType == SWITCH) ? baseSwitch : baseGate;
+                w.to   += (w.toType == LED)      ? baseLed    : baseGate;
+                c.wires.push_back(w);
+            }
+        }
+
+        if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
+
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            if (wireStart.valid) { wireStart.valid = false; return false; }
+            if (!selection.empty()) { selection.clear(); return false; }
             return true;
         }
 
-        // 2. Спавн новых элементов по цифрам 1, 2, 3 прямо под курсором
-        if (IsKeyPressed(KEY_ONE)) {
-            c.gates.push_back({});
-            pos.gates.push_back({ mouse.x - 30, mouse.y - 20 });
+        if (space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            isPanning = true;
+            panLastMouse = screenMouse;
+            return false;
         }
-        if (IsKeyPressed(KEY_TWO)) {
-            c.switches.push_back({});
-            pos.switches.push_back({ mouse.x - 20, mouse.y - 20 });
-        }
-        if (IsKeyPressed(KEY_THREE)) {
-            c.leds.push_back({});
-            pos.leds.push_back({ mouse.x - 20, mouse.y - 20 });
+        if (isPanning) {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                camera.target = Vector2Subtract(camera.target, Vector2Subtract(screenMouse, panLastMouse));
+                panLastMouse = screenMouse;
+                return false;
+            }
+            isPanning = false;
         }
 
-        // 3. Создание провода: Shift + клик (начало) или просто клик по второму пину (завершение)
+        if (IsKeyPressed(KEY_ONE))   { c.gates.push_back({});    pos.gates.push_back({ mouse.x - 30, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_TWO))   { c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_THREE)) { c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
+
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             PinHit hit = findPin(mouse, pos);
             if (!wireStart.valid && shift && hit.valid) {
@@ -117,7 +207,6 @@ struct Editor {
                 return false;
             }
             if (wireStart.valid) {
-                // Соединяем, только если один пин — выход, а второй — вход (и это не один и тот же элемент)
                 if (hit.valid && hit.isOutput != wireStart.isOutput &&
                     !(hit.type == wireStart.type && hit.index == wireStart.index)) {
                     PinHit outPin = wireStart.isOutput ? wireStart : hit;
@@ -129,52 +218,84 @@ struct Editor {
             }
         }
 
-        // 4. Обычный Drag-and-Drop элементов (если не тянем провод)
-        if (!wireStart.valid && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            clickStart = mouse;
-            auto tryGrab = [&](std::vector<Vector2>& list, NodeType type, float w, float h) {
+        if (!wireStart.valid && !space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            clickStartWorld = mouse;
+            dragLastWorld = mouse;
+
+            NodeType hitType = GATE;
+            int hitIdx = -1;
+
+            auto checkHit = [&](const std::vector<Vector2>& list, NodeType type, float w, float h) {
                 for (int i = (int)list.size() - 1; i >= 0; --i) {
                     if (CheckCollisionPointRec(mouse, { list[i].x, list[i].y, w, h })) {
-                        dragType = type;
-                        dragIndex = i;
-                        dragOffset = { mouse.x - list[i].x, mouse.y - list[i].y };
-                        return true;
+                        hitType = type; hitIdx = i; return true;
                     }
                 }
                 return false;
             };
-            if (!tryGrab(pos.gates, GATE, 60, 40))
-                if (!tryGrab(pos.switches, SWITCH, 40, 40))
-                    tryGrab(pos.leds, LED, 40, 40);
+
+            if (checkHit(pos.gates, GATE, 60, 40) || checkHit(pos.switches, SWITCH, 40, 40) || checkHit(pos.leds, LED, 40, 40)) {
+                isDragging = true;
+                if (!selection.has(hitType, hitIdx)) {
+                    selection.clear();
+                    if (hitType == GATE) selection.gates.push_back(hitIdx);
+                    else if (hitType == SWITCH) selection.switches.push_back(hitIdx);
+                    else if (hitType == LED) selection.leds.push_back(hitIdx);
+                }
+            } else {
+                selection.clear();
+                isSelecting = true;
+                selectStart = mouse;
+                selectBox = { mouse.x, mouse.y, 0, 0 };
+            }
         }
 
-        if (dragIndex != -1 && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 nextPos = { mouse.x - dragOffset.x, mouse.y - dragOffset.y };
-            if (dragType == GATE)        pos.gates[dragIndex] = nextPos;
-            else if (dragType == SWITCH) pos.switches[dragIndex] = nextPos;
-            else if (dragType == LED)    pos.leds[dragIndex] = nextPos;
+        if (isDragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            Vector2 delta = Vector2Subtract(mouse, dragLastWorld);
+            for (int idx : selection.gates)    pos.gates[idx]    = Vector2Add(pos.gates[idx], delta);
+            for (int idx : selection.switches) pos.switches[idx] = Vector2Add(pos.switches[idx], delta);
+            for (int idx : selection.leds)     pos.leds[idx]     = Vector2Add(pos.leds[idx], delta);
+            dragLastWorld = mouse;
+        }
+
+        if (isSelecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            selectBox = {
+                std::min(selectStart.x, mouse.x),
+                std::min(selectStart.y, mouse.y),
+                std::abs(mouse.x - selectStart.x),
+                std::abs(mouse.y - selectStart.y)
+            };
+            selection.clear();
+            for (int i = 0; i < (int)pos.gates.size(); ++i)
+                if (CheckCollisionRecs(selectBox, { pos.gates[i].x, pos.gates[i].y, 60, 40 })) selection.gates.push_back(i);
+            for (int i = 0; i < (int)pos.switches.size(); ++i)
+                if (CheckCollisionRecs(selectBox, { pos.switches[i].x, pos.switches[i].y, 40, 40 })) selection.switches.push_back(i);
+            for (int i = 0; i < (int)pos.leds.size(); ++i)
+                if (CheckCollisionRecs(selectBox, { pos.leds[i].x, pos.leds[i].y, 40, 40 })) selection.leds.push_back(i);
         }
 
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            if (dragIndex != -1 && dragType == SWITCH && Vector2Distance(clickStart, mouse) < 4.0f) {
-                c.switches[dragIndex].on = !c.switches[dragIndex].on;
+            if (isDragging && Vector2Distance(clickStartWorld, mouse) < 4.0f) {
+                if (selection.switches.size() == 1 && selection.gates.empty() && selection.leds.empty()) {
+                    c.switches[selection.switches[0]].on = !c.switches[selection.switches[0]].on;
+                }
             }
-            dragIndex = -1;
+            isDragging = false;
+            isSelecting = false;
         }
 
-        // 5. Удаление элемента или провода по клавише DEL
-        if (IsKeyPressed(KEY_DELETE)) {
-            for (int i = (int)pos.gates.size() - 1; i >= 0; --i)
-                if (CheckCollisionPointRec(mouse, { pos.gates[i].x, pos.gates[i].y, 60, 40 }))
-                    return deleteNode(c, pos, GATE, i), false;
+        if (IsKeyPressed(KEY_X)) {
+            if (!selection.empty()) {
+                std::sort(selection.gates.rbegin(), selection.gates.rend());
+                std::sort(selection.switches.rbegin(), selection.switches.rend());
+                std::sort(selection.leds.rbegin(), selection.leds.rend());
 
-            for (int i = (int)pos.switches.size() - 1; i >= 0; --i)
-                if (CheckCollisionPointRec(mouse, { pos.switches[i].x, pos.switches[i].y, 40, 40 }))
-                    return deleteNode(c, pos, SWITCH, i), false;
-
-            for (int i = (int)pos.leds.size() - 1; i >= 0; --i)
-                if (CheckCollisionPointRec(mouse, { pos.leds[i].x, pos.leds[i].y, 40, 40 }))
-                    return deleteNode(c, pos, LED, i), false;
+                for (int idx : selection.gates)    deleteNode(c, pos, GATE, idx);
+                for (int idx : selection.switches) deleteNode(c, pos, SWITCH, idx);
+                for (int idx : selection.leds)     deleteNode(c, pos, LED, idx);
+                selection.clear();
+                return false;
+            }
 
             for (int i = (int)c.wires.size() - 1; i >= 0; --i) {
                 const auto& w = c.wires[i];
@@ -195,7 +316,11 @@ struct Editor {
     }
 
     void draw(const Layout& pos) {
-        Vector2 m = GetMousePosition();
+        if (isSelecting) {
+            DrawRectangleRec(selectBox, Fade(SKYBLUE, 0.2f));
+            DrawRectangleLinesEx(selectBox, 1.5f, SKYBLUE);
+        }
+        Vector2 m = GetScreenToWorld2D(GetMousePosition(), camera);
         PinHit hover = findPin(m, pos);
 
         // Подсвечиваем пин под курсором, если зажат Shift или уже тянется провод

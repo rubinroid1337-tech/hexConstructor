@@ -4,7 +4,7 @@
 #include "input/editor.hpp"
 
 int main() {
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(800, 450, "hex constructor");
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
@@ -34,8 +34,12 @@ int main() {
 
         BeginDrawing();
         ClearBackground({ 30, 32, 38, 255 });
-        DrawCircuit(circuit, layout);
-        editor.draw(layout);
+
+        BeginMode2D(editor.camera);
+            DrawCircuit(circuit, layout, editor.selection);
+            editor.draw(layout);
+        EndMode2D();
+
         EndDrawing();
     }
 
