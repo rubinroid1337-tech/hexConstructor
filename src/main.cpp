@@ -4,26 +4,38 @@
 #include "input/editor.hpp"
 
 int main() {
-    InitWindow(800, 450, "Logic Simulator");
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    InitWindow(800, 450, "hex constructor");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(60);
 
     Circuit circuit;
-    std::vector<Vector2> positions;
+    Layout layout;
     Editor editor;
 
-    // Добавим пару вентилей для теста
-    circuit.gates.resize(2);
-    positions.push_back({ 150, 150 });
-    positions.push_back({ 400, 200 });
-    circuit.wires.push_back({ 0, 1, false, false });
+    circuit.switches.resize(2);
+    layout.switches = { { 120, 120 }, { 120, 240 } };
+
+    circuit.gates.resize(1);
+    layout.gates = { { 360, 180 } };
+
+    circuit.leds.resize(1);
+    layout.leds = { { 600, 180 } };
+
+    circuit.wires = {
+        { 0, 0, SWITCH, GATE, false, false }, // Switch 0 -> Gate 0 (вход A)
+        { 1, 0, SWITCH, GATE, true,  false }, // Switch 1 -> Gate 0 (вход B)
+        { 0, 0, GATE,   LED,  false, false }  // Gate 0   -> Led 0
+    };
 
     while (!WindowShouldClose()) {
-        editor.update(positions);  // 1. Обрабатываем перетаскивание мышью
-        circuit.tick();            // 2. Считаем логику схемы
+        editor.update(circuit, layout);
+        circuit.tick();
 
         BeginDrawing();
         ClearBackground({ 30, 32, 38, 255 });
-        DrawCircuit(circuit, positions); // 3. Рисуем на экране
+        DrawCircuit(circuit, layout);
+        editor.draw(layout);
         EndDrawing();
     }
 
