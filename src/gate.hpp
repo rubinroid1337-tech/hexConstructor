@@ -1,11 +1,9 @@
 #pragma once
 
-#include <cstdint>
-
 struct Gate {
-    uint8_t inputA : 1;
-    uint8_t inputB : 1;
-    uint8_t output : 1;
+    bool inputA{};
+    bool inputB{};
+    bool output{};
 
-    void update() { output = !(inputA & inputB); }
+    void update() { output = !(inputA && inputB); }
 };

@@ -13,11 +13,8 @@ struct GateSystem {
     void updateAllGates() {
         for (const auto& w : wires) {
             uint8_t signal = gates[w.fromGateIndex].output;
-            if (w.inputPin == 0) {
-                gates[w.toGateIndex].inputA = signal;
-            } else {
-                gates[w.toGateIndex].inputB = signal;
-            }
+            if (w.inputPin == 0) gates[w.toGateIndex].inputA = signal;
+            else                 gates[w.toGateIndex].inputB = signal;
         }
 
         for (auto& gate : gates) {

@@ -2,26 +2,31 @@
 #include <raymath.h>
 
 #include "gate.hpp"
+#include "gate-render.hpp"
+#include "ware-render.hpp"
 #include "gate-system.hpp"
 
 #include <iostream>
-#include <cassert>
-using namespace std;
 
 int main() {
-    GateSystem sys;
+    constexpr int screen_width  = 800;
+    constexpr int screen_height = 450;
+    InitWindow(screen_width, screen_height, "hex constructor");
 
-    int g1 = sys.addGate();
-    int g2 = sys.addGate();
+    SetTargetFPS(60);
 
-    sys.gates[g1].inputA = 1;
-    sys.gates[g1].inputB = 1;
-    sys.updateAllGates();
-    assert(sys.gates[g1].output == 0);
+    Gate gate;
+    gate = 
+    while (!WindowShouldClose())
+    {
+        BeginDrawing();
 
-    sys.addWire(g1, g2, 0);
+        ClearBackground(RAYWHITE);
 
-    sys.gates[g2].inputB = 0;
-    sys.updateAllGates();
-    assert(sys.gates[g2].output == 1);
+        
+
+        EndDrawing();
+    }
+
+    CloseWindow();
 }
