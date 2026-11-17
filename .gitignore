@@ -2,4 +2,6 @@ build/
 
 *.o
 *.obj
+*.exe
+
 simulator
