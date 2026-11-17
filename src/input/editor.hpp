@@ -37,11 +37,6 @@ struct Editor {
     Vector2 selectStart{};
     Rectangle selectBox{};
 
-    Kind dragType = GATE;
-    int dragIndex = -1;
-    Vector2 dragOffset{};
-    Vector2 clickStart{};
-
     bool isDragging = false;
     Vector2 dragLastWorld{};
     Vector2 clickStartWorld{};
@@ -101,7 +96,6 @@ struct Editor {
         if (type == GATE)        { c.gates.erase(c.gates.begin() + idx);       pos.gates.erase(pos.gates.begin() + idx); }
         else if (type == SWITCH) { c.switches.erase(c.switches.begin() + idx); pos.switches.erase(pos.switches.begin() + idx); }
         else if (type == LED)    { c.leds.erase(c.leds.begin() + idx);         pos.leds.erase(pos.leds.begin() + idx); }
-        dragIndex = -1;
         wireStart.valid = false;
     }
 
