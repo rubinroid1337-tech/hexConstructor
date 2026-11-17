@@ -4,41 +4,9 @@
 #include "raylib.h"
 #include "../core/circuit.hpp"
 #include "../core/kind.hpp"
-
-constexpr Color DARK_RED = { 75, 12, 18, 255 };
-
-struct Layout {
-    std::vector<Vector2> gates;
-    std::vector<Vector2> switches;
-    std::vector<Vector2> leds;
-};
-
-struct Selection {
-    std::vector<int> gates;
-    std::vector<int> switches;
-    std::vector<int> leds;
-
-    void clear() { gates.clear(); switches.clear(); leds.clear(); }
-    bool empty() const { return gates.empty() && switches.empty() && leds.empty(); }
-    bool has(Kind type, int idx) const {
-        const auto& v = (type == GATE) ? gates : (type == SWITCH ? switches : leds);
-        return std::find(v.begin(), v.end(), idx) != v.end();
-    }
-};
-
-inline void DrawWire(Vector2 start, Vector2 end, bool on) {
-    float offset = std::max(std::abs(end.x - start.x) * 0.5f, 40.0f);
-    Vector2 pts[4] = {
-        start,
-        { start.x + offset, start.y },
-        { end.x - offset, end.y },
-        end
-    };
-    Color col = on ? RED : DARK_RED;
-
-    DrawSplineBezierCubic(pts, 4, 6.0f, Fade(BLACK, 0.5f));
-    DrawSplineBezierCubic(pts, 4, 3.5f, col);
-}
+#include "layout.hpp"
+#include "selection.hpp"
+#include "draw-wire.hpp"
 
 inline void DrawCircuit(const Circuit& c, const Layout& pos, const Selection& sel) {
     for (const auto& w : c.wires) {
