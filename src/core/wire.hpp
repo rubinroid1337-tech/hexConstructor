@@ -1,11 +1,11 @@
 #pragma once
 
-enum NodeType : unsigned char { GATE = 0, SWITCH = 1, LED = 2 };
+#include "kind.hpp"
 
 struct Wire {
     int from{}, to{};
-    NodeType fromType = GATE;
-    NodeType toType = GATE;
+    Kind fromType = GATE;
+    Kind toType = GATE;
     bool pin{};
     bool on{};
 };

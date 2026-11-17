@@ -5,11 +5,12 @@
 #include "raymath.h"
 #include "../core/circuit.hpp"
 #include "../render/circuit-render.hpp"
+#include "../core/kind.hpp"
 
 struct PinHit {
     bool valid = false;
     bool isOutput = false; // true = выход (out), false = вход (in)
-    NodeType type = GATE;
+    Kind type = GATE;
     int index = -1;
     bool gatePin = false;  // false = верхний вход (A), true = нижний (B)
     Vector2 pos{};
@@ -36,7 +37,7 @@ struct Editor {
     Vector2 selectStart{};
     Rectangle selectBox{};
 
-    NodeType dragType = GATE;
+    Kind dragType = GATE;
     int dragIndex = -1;
     Vector2 dragOffset{};
     Vector2 clickStart{};
@@ -87,7 +88,7 @@ struct Editor {
         return false;
     }
 
-    void deleteNode(Circuit& c, Layout& pos, NodeType type, int idx) {
+    void deleteNode(Circuit& c, Layout& pos, Kind type, int idx) {
         for (int i = (int)c.wires.size() - 1; i >= 0; --i) {
             auto& w = c.wires[i];
             if ((w.fromType == type && w.from == idx) || (w.toType == type && w.to == idx)) {
@@ -130,7 +131,7 @@ struct Editor {
             for (int i : selection.leds)     clipboard.leds.push_back(Vector2Subtract(pos.leds[i], center));
 
             // Вспомогательная лямбда для поиска нового локального индекса элемента в буфере
-            auto findLocalIdx = [&](NodeType type, int oldIdx) -> int {
+            auto findLocalIdx = [&](Kind type, int oldIdx) -> int {
                 const auto& list = (type == GATE) ? selection.gates : (type == SWITCH ? selection.switches : selection.leds);
                 auto it = std::find(list.begin(), list.end(), oldIdx);
                 return (it != list.end()) ? (int)std::distance(list.begin(), it) : -1;
@@ -225,10 +226,10 @@ struct Editor {
             clickStartWorld = mouse;
             dragLastWorld = mouse;
 
-            NodeType hitType = GATE;
+            Kind hitType = GATE;
             int hitIdx = -1;
 
-            auto checkHit = [&](const std::vector<Vector2>& list, NodeType type, float w, float h) {
+            auto checkHit = [&](const std::vector<Vector2>& list, Kind type, float w, float h) {
                 for (int i = (int)list.size() - 1; i >= 0; --i) {
                     if (CheckCollisionPointRec(mouse, { list[i].x, list[i].y, w, h })) {
                         hitType = type; hitIdx = i; return true;

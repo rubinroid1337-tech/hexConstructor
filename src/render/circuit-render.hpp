@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "raylib.h"
 #include "../core/circuit.hpp"
+#include "../core/kind.hpp"
 
 constexpr Color DARK_RED = { 75, 12, 18, 255 };
 
@@ -19,7 +20,7 @@ struct Selection {
 
     void clear() { gates.clear(); switches.clear(); leds.clear(); }
     bool empty() const { return gates.empty() && switches.empty() && leds.empty(); }
-    bool has(NodeType type, int idx) const {
+    bool has(Kind type, int idx) const {
         const auto& v = (type == GATE) ? gates : (type == SWITCH ? switches : leds);
         return std::find(v.begin(), v.end(), idx) != v.end();
     }
