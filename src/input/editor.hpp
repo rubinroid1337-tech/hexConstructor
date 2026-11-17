@@ -6,15 +6,7 @@
 #include "../core/circuit.hpp"
 #include "../render/circuit-render.hpp"
 #include "../core/kind.hpp"
-
-struct PinHit {
-    bool valid = false;
-    bool isOutput = false; // true = выход (out), false = вход (in)
-    Kind type = GATE;
-    int index = -1;
-    bool gatePin = false;  // false = верхний вход (A), true = нижний (B)
-    Vector2 pos{};
-};
+#include "pin-hit.hpp"
 
 struct Clipboard {
     std::vector<Vector2> gates;
