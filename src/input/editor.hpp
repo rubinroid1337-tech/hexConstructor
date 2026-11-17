@@ -33,27 +33,33 @@ struct Editor {
     Vector2 dragLastWorld{};
     Vector2 clickStartWorld{};
 
-    PinHit wireStart{}; // Активный пин, от которого сейчас тянется провод
+    PinHit wireStart{};
 
     PinHit findPin(Vector2 mouse, const Layout& pos) {
+        auto hit = [&](Vector2 pt, PinHit res) -> bool {
+            if (!CheckCollisionPointCircle(mouse, pt, 10)) return false;
+            res.pos = pt;
+            return true;
+        };
+
         for (int i = 0; i < (int)pos.gates.size(); ++i) {
             Vector2 p = pos.gates[i];
             if (CheckCollisionPointCircle(mouse, { p.x, p.y + 10 }, 10))
-                return { true, false, GATE, i, false, { p.x, p.y + 10 } };
+                return { .pos = { p.x, p.y + 10 }, .idx = i };
             if (CheckCollisionPointCircle(mouse, { p.x, p.y + 30 }, 10))
-                return { true, false, GATE, i, true,  { p.x, p.y + 30 } };
+                return { .pos = { p.x, p.y + 30 }, .idx = i, .gatePin = true };
             if (CheckCollisionPointCircle(mouse, { p.x + 60, p.y + 20 }, 10))
-                return { true, true,  GATE, i, false, { p.x + 60, p.y + 20 } };
+                return { .pos = { p.x + 60, p.y + 20 }, .idx = i, .isOut = true };
         }
         for (int i = 0; i < (int)pos.switches.size(); ++i) {
             Vector2 p = { pos.switches[i].x + 40, pos.switches[i].y + 20 };
             if (CheckCollisionPointCircle(mouse, p, 10))
-                return { true, true, SWITCH, i, false, p };
+                return { .pos = p, .idx = i, .type = SWITCH, .isOut = true };
         }
         for (int i = 0; i < (int)pos.leds.size(); ++i) {
             Vector2 p = { pos.leds[i].x, pos.leds[i].y + 20 };
             if (CheckCollisionPointCircle(mouse, p, 10))
-                return { true, false, LED, i, false, p };
+                return { .pos = p, .idx = i, .type = LED };
         }
         return {};
     }
@@ -88,7 +94,7 @@ struct Editor {
         if (type == GATE)        { c.gates.erase(c.gates.begin() + idx);       pos.gates.erase(pos.gates.begin() + idx); }
         else if (type == SWITCH) { c.switches.erase(c.switches.begin() + idx); pos.switches.erase(pos.switches.begin() + idx); }
         else if (type == LED)    { c.leds.erase(c.leds.begin() + idx);         pos.leds.erase(pos.leds.begin() + idx); }
-        wireStart.valid = false;
+        wireStart = {};
     }
 
     bool update(Circuit& c, Layout& pos) {
@@ -99,31 +105,26 @@ struct Editor {
 
         bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
-        // Копирование выделенной группы (Ctrl + C)
         if (ctrl && IsKeyPressed(KEY_C) && !selection.empty()) {
             clipboard = {};
             Vector2 center{};
             int total = 0;
 
-            // Считаем центр масс выделенной группы, чтобы при вставке она появлялась ровно под курсором
             for (int i : selection.gates)    { center = Vector2Add(center, pos.gates[i]);    total++; }
             for (int i : selection.switches) { center = Vector2Add(center, pos.switches[i]); total++; }
             for (int i : selection.leds)     { center = Vector2Add(center, pos.leds[i]);     total++; }
             center = Vector2Scale(center, 1.0f / total);
 
-            // Сохраняем относительные координаты элементов
             for (int i : selection.gates)    clipboard.gates.push_back(Vector2Subtract(pos.gates[i], center));
             for (int i : selection.switches) clipboard.switches.push_back(Vector2Subtract(pos.switches[i], center));
             for (int i : selection.leds)     clipboard.leds.push_back(Vector2Subtract(pos.leds[i], center));
 
-            // Вспомогательная лямбда для поиска нового локального индекса элемента в буфере
             auto findLocalIdx = [&](Kind type, int oldIdx) -> int {
                 const auto& list = (type == GATE) ? selection.gates : (type == SWITCH ? selection.switches : selection.leds);
                 auto it = std::find(list.begin(), list.end(), oldIdx);
                 return (it != list.end()) ? (int)std::distance(list.begin(), it) : -1;
             };
 
-            // Копируем только внутренние провода (где оба конца попали в выделение)
             for (const auto& w : c.wires) {
                 int newFrom = findLocalIdx(w.fromType, w.from);
                 int newTo   = findLocalIdx(w.toType, w.to);
@@ -165,7 +166,7 @@ struct Editor {
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 
         if (IsKeyPressed(KEY_ESCAPE)) {
-            if (wireStart.valid) { wireStart.valid = false; return false; }
+            if (wireStart) { wireStart = {}; return false; }
             if (!selection.empty()) { selection.clear(); return false; }
             return true;
         }
@@ -192,23 +193,23 @@ struct Editor {
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             PinHit hit = findPin(mouse, pos);
-            if (!wireStart.valid && shift && hit.valid) {
+            if (!wireStart && shift && hit) {
                 wireStart = hit;
                 return false;
             }
-            if (wireStart.valid) {
-                if (hit.valid && hit.isOut != wireStart.isOut &&
-                    !(hit.type == wireStart.type && hit.index == wireStart.index)) {
+            if (wireStart) {
+                if (hit && hit.isOut != wireStart.isOut &&
+                    !(hit.type == wireStart.type && hit.idx == wireStart.idx)) {
                     PinHit outPin = wireStart.isOut ? wireStart : hit;
                     PinHit inPin  = wireStart.isOut ? hit : wireStart;
-                    c.wires.push_back({ outPin.index, inPin.index, outPin.type, inPin.type, inPin.gatePin, false });
+                    c.wires.push_back({ outPin.idx, inPin.idx, outPin.type, inPin.type, inPin.gatePin, false });
                 }
-                wireStart.valid = false;
+                wireStart = {};
                 return false;
             }
         }
 
-        if (!wireStart.valid && !space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (!wireStart && !space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             clickStartWorld = mouse;
             dragLastWorld = mouse;
 
@@ -313,14 +314,14 @@ struct Editor {
         Vector2 m = GetScreenToWorld2D(GetMousePosition(), camera);
         PinHit hover = findPin(m, pos);
 
-        if (hover.valid && (wireStart.valid || IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
+        if (hover && (wireStart || IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
             DrawCircleLinesV(hover.pos, 7.0f, RAYWHITE);
         }
 
-        if (!wireStart.valid) return;
+        if (!wireStart) return;
 
-        bool canConnect = hover.valid && hover.isOut != wireStart.isOut &&
-                          !(hover.type == wireStart.type && hover.index == wireStart.index);
+        bool canConnect = hover && hover.isOut != wireStart.isOut &&
+                          !(hover.type == wireStart.type && hover.idx == wireStart.idx);
 
         Vector2 target = canConnect ? hover.pos : m;
 
