@@ -197,10 +197,10 @@ struct Editor {
                 return false;
             }
             if (wireStart.valid) {
-                if (hit.valid && hit.isOutput != wireStart.isOutput &&
+                if (hit.valid && hit.isOut != wireStart.isOut &&
                     !(hit.type == wireStart.type && hit.index == wireStart.index)) {
-                    PinHit outPin = wireStart.isOutput ? wireStart : hit;
-                    PinHit inPin  = wireStart.isOutput ? hit : wireStart;
+                    PinHit outPin = wireStart.isOut ? wireStart : hit;
+                    PinHit inPin  = wireStart.isOut ? hit : wireStart;
                     c.wires.push_back({ outPin.index, inPin.index, outPin.type, inPin.type, inPin.gatePin, false });
                 }
                 wireStart.valid = false;
@@ -313,21 +313,18 @@ struct Editor {
         Vector2 m = GetScreenToWorld2D(GetMousePosition(), camera);
         PinHit hover = findPin(m, pos);
 
-        // Подсвечиваем пин под курсором, если зажат Shift или уже тянется провод
         if (hover.valid && (wireStart.valid || IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
             DrawCircleLinesV(hover.pos, 7.0f, RAYWHITE);
         }
 
         if (!wireStart.valid) return;
 
-        // Проверяем, можно ли прикрепить провод к пину под курсором
-        bool canConnect = hover.valid && hover.isOutput != wireStart.isOutput &&
+        bool canConnect = hover.valid && hover.isOut != wireStart.isOut &&
                           !(hover.type == wireStart.type && hover.index == wireStart.index);
 
-        // Если можно подключить — конец провода прилипает точно к пину
         Vector2 target = canConnect ? hover.pos : m;
 
-        if (wireStart.isOutput) DrawWire(wireStart.pos, target, true);
+        if (wireStart.isOut) DrawWire(wireStart.pos, target, true);
         else                    DrawWire(target, wireStart.pos, true);
     }
 };

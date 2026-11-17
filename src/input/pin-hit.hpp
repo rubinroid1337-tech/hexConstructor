@@ -5,7 +5,7 @@
 
 struct PinHit {
     bool valid{};
-    bool isOutput{};
+    bool isOut{};
     Kind type = GATE;
     int index = -1;
     bool gatePin{};
