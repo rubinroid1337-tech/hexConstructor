@@ -7,15 +7,7 @@
 #include "../render/circuit-render.hpp"
 #include "../core/kind.hpp"
 #include "pin-hit.hpp"
-
-struct Clipboard {
-    std::vector<Vector2> gates;
-    std::vector<Vector2> switches;
-    std::vector<Vector2> leds;
-    std::vector<Wire> wires;
-
-    bool empty() const { return gates.empty() && switches.empty() && leds.empty(); }
-};
+#include "clipboard.hpp"
 
 struct Editor {
     Camera2D camera{ {0, 0}, {0, 0}, 0.0f, 1.0f };
