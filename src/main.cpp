@@ -2,6 +2,7 @@
 #include "core/circuit.hpp"
 #include "render/circuit-render.hpp"
 #include "input/editor.hpp"
+#include "core/save.hpp"
 
 int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
@@ -22,11 +23,7 @@ int main() {
     circuit.leds.resize(1);
     layout.leds = { { 600, 180 } };
 
-    circuit.wires = {
-        { 0, 0, SWITCH, GATE, false, false }, // Switch 0 -> Gate 0 (вход A)
-        { 1, 0, SWITCH, GATE, true,  false }, // Switch 1 -> Gate 0 (вход B)
-        { 0, 0, GATE,   LED,  false, false }  // Gate 0   -> Led 0
-    };
+    loadFile(circuit, layout, "save.json");
 
     while (!WindowShouldClose()) {
         editor.update(circuit, layout);
@@ -42,6 +39,8 @@ int main() {
 
         EndDrawing();
     }
+
+    saveFile(circuit, layout, "save.json");
 
     CloseWindow();
     return 0;
