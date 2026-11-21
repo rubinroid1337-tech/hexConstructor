@@ -19,6 +19,7 @@ struct Editor {
     Selection selection{};
     Clipboard clipboard{};
 
+    bool isSingleDrag = false;
     bool isPanning = false;
     Vector2 panLastMouse{};
 
@@ -299,19 +300,22 @@ struct Editor {
                 }
                 return false;
             };
-
             if (checkHit(pos.gates, GATE, 60, 40) || checkHit(pos.switches, SWITCH, 40, 40) || checkHit(pos.leds, LED, 40, 40)) {
                 pushHistory(c, pos);
                 isDragging = true;
                 if (!selection.has(hitType, hitIdx)) {
                     selection.clear();
-                    if (hitType == GATE) selection.gates.push_back(hitIdx);
+                    if (hitType == GATE)        selection.gates.push_back(hitIdx);
                     else if (hitType == SWITCH) selection.switches.push_back(hitIdx);
-                    else if (hitType == LED) selection.leds.push_back(hitIdx);
+                    else if (hitType == LED)    selection.leds.push_back(hitIdx);
+                    isSingleDrag = true;
+                } else {
+                    isSingleDrag = false;
                 }
             } else {
                 selection.clear();
                 isSelecting = true;
+                isSingleDrag = false;
                 selectStart = mouse;
                 selectBox = { mouse.x, mouse.y, 0, 0 };
             }
@@ -342,31 +346,59 @@ struct Editor {
         }
 
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            if (isDragging && Vector2Distance(clickStartWorld, mouse) < 4.0f) {
-                if (selection.switches.size() == 1 && selection.gates.empty() && selection.leds.empty()) {
-                    c.switches[selection.switches[0]].on = !c.switches[selection.switches[0]].on;
+            if (isDragging) {
+                if (Vector2Distance(clickStartWorld, mouse) < 4.0f) {
+                    if (!undoStack.empty()) undoStack.pop_back(); // убираем пустой шаг из истории, раз не двигали
+                    if (selection.switches.size() == 1 && selection.gates.empty() && selection.leds.empty()) {
+                        c.switches[selection.switches[0]].on = !c.switches[selection.switches[0]].on;
+                    }
+                }
+                if (isSingleDrag) {
+                    selection.clear();
                 }
             }
             isDragging = false;
             isSelecting = false;
+            isSingleDrag = false;
         }
 
         if (IsKeyPressed(KEY_X)) {
             if (!selection.empty()) {
+            pushHistory(c, pos);
+
+            std::sort(selection.gates.rbegin(), selection.gates.rend());
+            std::sort(selection.switches.rbegin(), selection.switches.rend());
+            std::sort(selection.leds.rbegin(), selection.leds.rend());
+
+            for (int idx : selection.gates)    deleteNode(c, pos, GATE, idx);
+            for (int idx : selection.switches) deleteNode(c, pos, SWITCH, idx);
+            for (int idx : selection.leds)     deleteNode(c, pos, LED, idx);
+            selection.clear();
+            return false;
+        }
+
+        for (int i = (int)c.wires.size() - 1; i >= 0; --i) {
+            const auto& w = c.wires[i];
+            Vector2 start = (w.fromType == SWITCH)
+                ? Vector2{ pos.switches[w.from].x + 40, pos.switches[w.from].y + 20 }
+                : Vector2{ pos.gates[w.from].x + 60,    pos.gates[w.from].y + 20 };
+
+            Vector2 end{};
+            if (w.toType == LED) {
+                end = { pos.leds[w.to].x, pos.leds[w.to].y + 20 };
+            } else {
+                float pinY = c.gates[w.to].isSingleInput() ? 20.0f : (w.pin ? 30.0f : 10.0f);
+                end = { pos.gates[w.to].x, pos.gates[w.to].y + pinY };
+            }
+
+            if (isMouseOverWire(mouse, start, end)) {
                 pushHistory(c, pos);
-
-                std::sort(selection.gates.rbegin(), selection.gates.rend());
-                std::sort(selection.switches.rbegin(), selection.switches.rend());
-                std::sort(selection.leds.rbegin(), selection.leds.rend());
-
-                for (int idx : selection.gates)    deleteNode(c, pos, GATE, idx);
-                for (int idx : selection.switches) deleteNode(c, pos, SWITCH, idx);
-                for (int idx : selection.leds)     deleteNode(c, pos, LED, idx);
-                selection.clear();
+                c.wires.erase(c.wires.begin() + i);
                 return false;
             }
         }
-        return false;
+    }
+    return false;
     }
 
     void draw(const Circuit& c, const Layout& pos) {
