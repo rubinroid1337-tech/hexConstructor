@@ -5,13 +5,9 @@
 #include <fstream>
 #include <string>
 
-// Подключите ваши файлы со структурами (укажите ваши точные пути, например):
 #include "circuit.hpp"
 #include "../render/layout.hpp"
 
-using json = nlohmann::json;
-
-// Только ПОСЛЕ всех #include пишем макросы:
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Vector2, x, y)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Gate, in, out)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Led, on)
@@ -20,33 +16,39 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Wire, from, to, fromType, toType, pin, on)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Circuit, gates, leds, switches, wires)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Layout, gates, switches, leds)
 
-// 3. Сохранение
-inline bool saveFile(const Circuit& circuit, const Layout& layout, const std::string& path) {
-    json data;
-    data["circuit"] = circuit;
-    data["layout"] = layout;
+struct SaveData {
+    Circuit circuit;
+    Layout layout;
+};
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(SaveData, circuit, layout)
+
+inline bool saveFile(const Circuit& circuit, const Layout& layout, const std::filesystem::path& path) {
     std::ofstream out(path);
-    if (!out.is_open()) {
+    if (!out) {
         return false;
     }
 
+    const nlohmann::json data = SaveData{circuit, layout};
     out << data.dump(4);
-    return true;
+    return out.good();
 }
 
-// 4. Загрузка
-inline bool loadFile(Circuit& circuit, Layout& layout, const std::string& path) {
+inline bool loadFile(Circuit& circuit, Layout& layout, const std::filesystem::path& path) {
     std::ifstream in(path);
-    if (!in.is_open()) {
+    if (!in) {
         return false;
     }
 
-    json data;
-    in >> data;
+    try {
+        nlohmann::json data;
+        in >> data;
 
-    circuit = data.at("circuit").get<Circuit>();
-    layout = data.at("layout").get<Layout>();
-    return true;
+        auto loaded = data.get<SaveData>();
+        circuit = std::move(loaded.circuit);
+        layout = std::move(loaded.layout);
+        return true;
+    } catch (const nlohmann::json::exception&) {
+        return false;
+    }
 }
-

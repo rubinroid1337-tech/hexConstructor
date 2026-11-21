@@ -12,7 +12,6 @@ int main() {
 
     Circuit circuit;
     Layout layout;
-    Hotkeys hotkeys;
     Editor editor;
 
     circuit.switches.resize(2);
@@ -27,7 +26,7 @@ int main() {
     loadFile(circuit, layout, "save.json");
 
     while (!WindowShouldClose()) {
-        hotkeys.hotkeysUpdate(circuit, layout);
+        editor.hotkeysUpdate(circuit, layout);
         circuit.tick();
 
         BeginDrawing();

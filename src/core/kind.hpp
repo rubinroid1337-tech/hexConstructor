@@ -1,9 +1,6 @@
 #pragma once
 
-#include <cstdint>
-
-enum Kind : uint8_t {
-    NONE,
+enum Kind : unsigned char {
     GATE,
     LED,
     SWITCH
