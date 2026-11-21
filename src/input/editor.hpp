@@ -221,7 +221,8 @@ struct Editor {
         }
         if (isPanning) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                camera.target = Vector2Subtract(camera.target, Vector2Subtract(screenMouse, panLastMouse));
+                Vector2 delta = Vector2Subtract(screenMouse, panLastMouse);
+                camera.target = Vector2Subtract(camera.target, Vector2Scale(delta, 1.0f / camera.zoom));
                 panLastMouse = screenMouse;
                 SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
                 return false;
@@ -229,6 +230,20 @@ struct Editor {
             SetMouseCursor(MOUSE_CURSOR_DEFAULT);
             isPanning = false;
         }
+
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0.0f) {
+            Vector2 mouseWorldBefore = GetScreenToWorld2D(screenMouse, camera);
+
+            camera.offset = screenMouse;
+            camera.target = mouseWorldBefore;
+
+            float scaleFactor = 1.0f + (0.15f * std::abs(wheel));
+            if (wheel < 0.0f) scaleFactor = 1.0f / scaleFactor;
+
+            camera.zoom = std::clamp(camera.zoom * scaleFactor, 0.2f, 4.0f);
+        }
+
 
         if (IsKeyPressed(KEY_ONE))   { pushHistory(c, pos); c.gates.push_back({});    pos.gates.push_back({ mouse.x - 30, mouse.y - 20 }); }
         if (IsKeyPressed(KEY_TWO))   { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
