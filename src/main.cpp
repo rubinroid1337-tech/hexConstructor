@@ -14,20 +14,20 @@ int main() {
     Layout layout;
     Editor editor;
 
-    circuit.switches.resize(2);
-    layout.switches = { { 120, 120 }, { 120, 240 } };
-
-    circuit.gates.resize(1);
-    layout.gates = { { 360, 180 } };
-
-    circuit.leds.resize(1);
-    layout.leds = { { 600, 180 } };
-
     loadFile(circuit, layout, "save.json");
+
+    float autoSaveTimer = 0.0f;
+    const float autoSaveInterval = 10.0f;
 
     while (!WindowShouldClose()) {
         editor.hotkeysUpdate(circuit, layout);
         circuit.tick();
+
+        autoSaveTimer += GetFrameTime();
+        if (autoSaveTimer >= autoSaveInterval) {
+            autoSaveTimer = 0.0f;
+            saveFile(circuit, layout, "save.json");
+        }
 
         BeginDrawing();
         ClearBackground({ 30, 32, 38, 255 });
