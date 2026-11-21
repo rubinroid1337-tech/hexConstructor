@@ -2,6 +2,6 @@
 
 enum Kind : unsigned char {
     GATE,
-    LED,
-    SWITCH
+    SWITCH,
+    LED
 };
