@@ -133,7 +133,6 @@ struct Editor {
             int baseSwitch = (int)c.switches.size();
             int baseLed    = (int)c.leds.size();
 
-        auto pasteAll = [&]() {
             auto paste = [&](const auto& clipList, auto& selList, auto& cList, auto& posList) {
                 for (const auto& rel : clipList) {
                     selList.push_back((int)cList.size());
@@ -145,11 +144,16 @@ struct Editor {
             paste(clipboard.gates,    selection.gates,    c.gates,    pos.gates);
             paste(clipboard.switches, selection.switches, c.switches, pos.switches);
             paste(clipboard.leds,     selection.leds,     c.leds,     pos.leds);
-        };
+
+            auto getBase = [&](Kind type) {
+                if (type == GATE)   return baseGate;
+                if (type == SWITCH) return baseSwitch;
+                return baseLed;
+            };
 
             for (auto w : clipboard.wires) {
-                w.from += (w.fromType == SWITCH) ? baseSwitch : baseGate;
-                w.to   += (w.toType == LED)      ? baseLed    : baseGate;
+                w.from += getBase(w.fromType);
+                w.to   += getBase(w.toType);
                 c.wires.push_back(w);
             }
         }
