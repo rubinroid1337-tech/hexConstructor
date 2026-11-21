@@ -9,6 +9,11 @@
 #include "pin-hit.hpp"
 #include "clipboard.hpp"
 
+struct Snapshot {
+    Circuit circuit;
+    Layout layout;
+};
+
 struct Editor {
     Camera2D camera{ {0, 0}, {0, 0}, 0.0f, 1.0f };
     Selection selection{};
@@ -26,6 +31,35 @@ struct Editor {
     Vector2 clickStartWorld{};
 
     PinHit wireStart{};
+
+    std::vector<Snapshot> undoStack;
+    std::vector<Snapshot> redoStack;
+
+    void pushHistory(const Circuit& c, const Layout& pos) {
+        if (undoStack.size() >= 100) undoStack.erase(undoStack.begin()); // лимит 100 шагов
+        undoStack.push_back({ c, pos });
+        redoStack.clear();
+    }
+
+    void undo(Circuit& c, Layout& pos) {
+        if (undoStack.empty()) return;
+        redoStack.push_back({ c, pos });
+        c   = std::move(undoStack.back().circuit);
+        pos = std::move(undoStack.back().layout);
+        undoStack.pop_back();
+        selection.clear();
+        wireStart = {};
+    }
+
+    void redo(Circuit& c, Layout& pos) {
+        if (redoStack.empty()) return;
+        undoStack.push_back({ c, pos });
+        c   = std::move(redoStack.back().circuit);
+        pos = std::move(redoStack.back().layout);
+        redoStack.pop_back();
+        selection.clear();
+        wireStart = {};
+    }
 
     PinHit findPin(Vector2 mouse, const Layout& pos) {
         auto hit = [&](Vector2 pt, PinHit res) -> bool {
@@ -89,13 +123,26 @@ struct Editor {
         wireStart = {};
     }
 
-        bool hotkeysUpdate(Circuit& c, Layout& pos) {
+    bool hotkeysUpdate(Circuit& c, Layout& pos) {
         Vector2 screenMouse = GetMousePosition();
         Vector2 mouse = GetScreenToWorld2D(screenMouse, camera);
         bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         bool space = IsKeyDown(KEY_SPACE);
 
         bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        
+        
+        if (ctrl && IsKeyPressed(KEY_Z)) {
+            if (shift) redo(c, pos);
+            else       undo(c, pos);
+            return false;
+        }
+
+        if (ctrl && IsKeyPressed(KEY_Y)) {
+            redo(c, pos);
+            return false;
+        }
+
 
         if (ctrl && IsKeyPressed(KEY_C) && !selection.empty()) {
             clipboard = {};
@@ -127,6 +174,7 @@ struct Editor {
         }
 
         if (ctrl && IsKeyPressed(KEY_V) && !clipboard.empty()) {
+            pushHistory(c, pos);
             selection.clear();
 
             int baseGate   = (int)c.gates.size();
@@ -182,9 +230,9 @@ struct Editor {
             isPanning = false;
         }
 
-        if (IsKeyPressed(KEY_ONE))   { c.gates.push_back({});    pos.gates.push_back({ mouse.x - 30, mouse.y - 20 }); }
-        if (IsKeyPressed(KEY_TWO))   { c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
-        if (IsKeyPressed(KEY_THREE)) { c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_ONE))   { pushHistory(c, pos); c.gates.push_back({});    pos.gates.push_back({ mouse.x - 30, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_TWO))   { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_THREE)) { pushHistory(c, pos); c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             PinHit hit = findPin(mouse, pos);
@@ -195,6 +243,7 @@ struct Editor {
             if (wireStart) {
                 if (hit && hit.isOut != wireStart.isOut &&
                     !(hit.type == wireStart.type && hit.idx == wireStart.idx)) {
+                    pushHistory(c, pos);
                     PinHit outPin = wireStart.isOut ? wireStart : hit;
                     PinHit inPin  = wireStart.isOut ? hit : wireStart;
                     c.wires.push_back({ outPin.idx, inPin.idx, outPin.type, inPin.type, inPin.gatePin, false });
@@ -221,6 +270,7 @@ struct Editor {
             };
 
             if (checkHit(pos.gates, GATE, 60, 40) || checkHit(pos.switches, SWITCH, 40, 40) || checkHit(pos.leds, LED, 40, 40)) {
+                pushHistory(c, pos);
                 isDragging = true;
                 if (!selection.has(hitType, hitIdx)) {
                     selection.clear();
@@ -272,6 +322,8 @@ struct Editor {
 
         if (IsKeyPressed(KEY_X)) {
             if (!selection.empty()) {
+                pushHistory(c, pos);
+
                 std::sort(selection.gates.rbegin(), selection.gates.rend());
                 std::sort(selection.switches.rbegin(), selection.switches.rend());
                 std::sort(selection.leds.rbegin(), selection.leds.rend());
