@@ -34,7 +34,7 @@ int main() {
 
         BeginMode2D(editor.camera);
             DrawCircuit(circuit, layout, editor.selection);
-            editor.draw(layout);
+            editor.draw(circuit, layout);
         EndMode2D();
 
         EndDrawing();

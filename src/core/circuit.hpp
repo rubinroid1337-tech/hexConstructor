@@ -11,22 +11,33 @@ struct Circuit {
     std::vector<Led> leds;
     std::vector<Wire> wires;
 
+    bool readOutput(Kind type, int idx) const {
+        if (idx < 0) return false;
+        if (type == SWITCH && idx < (int)switches.size()) return switches[idx].on;
+        if (type == GATE   && idx < (int)gates.size())    return gates[idx].out;
+        return false;
+    }
+
+    void writeInput(Kind type, int idx, int pin, bool value) {
+        if (idx < 0 || !value) return;
+        if (type == LED  && idx < (int)leds.size()) leds[idx].on = true;
+        if (type == GATE && idx < (int)gates.size() && (pin == 0 || pin == 1)) {
+            gates[idx].in[pin] = true;
+        }
+    }
+
     void tick() {
         for (auto& g : gates) g.in[0] = g.in[1] = false;
         for (auto& l : leds)  l.on = false;
 
         for (auto& w : wires) {
-            w.on = (w.fromType == SWITCH) ? switches[w.from].on : gates[w.from].out;
-
-            if (w.toType == LED) {
-                leds[w.to].on |= w.on;
-            } else {
-                gates[w.to].in[w.pin] |= w.on;
-            }
+            w.on = readOutput(w.fromType, w.from);
+            writeInput(w.toType, w.to, w.pin, w.on);
         }
 
         for (auto& g : gates) {
-            g.out = !(g.in[0] && g.in[1]);
+            g.evaluate();
         }
     }
 };
+

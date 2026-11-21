@@ -9,7 +9,15 @@
 #include "../render/layout.hpp"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Vector2, x, y)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Gate, in, out)
+NLOHMANN_JSON_SERIALIZE_ENUM(GateType, {
+    {GateType::NAND, "NAND"},
+    {GateType::AND,  "AND"},
+    {GateType::OR,   "OR"},
+    {GateType::XOR,  "XOR"},
+    {GateType::NOT,  "NOT"},
+})
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Gate, type, in, out)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Led, on)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Switch, on)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Wire, from, to, fromType, toType, pin, on)

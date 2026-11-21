@@ -61,7 +61,7 @@ struct Editor {
         wireStart = {};
     }
 
-    PinHit findPin(Vector2 mouse, const Layout& pos) {
+    PinHit findPin(Vector2 mouse, const Circuit& c, const Layout& pos) {
         auto hit = [&](Vector2 pt, PinHit res) -> bool {
             if (!CheckCollisionPointCircle(mouse, pt, 10)) return false;
             res.pos = pt;
@@ -70,13 +70,18 @@ struct Editor {
 
         for (int i = 0; i < (int)pos.gates.size(); ++i) {
             Vector2 p = pos.gates[i];
-            if (CheckCollisionPointCircle(mouse, { p.x, p.y + 10 }, 10))
-                return { .pos = { p.x, p.y + 10 }, .idx = i };
-            if (CheckCollisionPointCircle(mouse, { p.x, p.y + 30 }, 10))
-                return { .pos = { p.x, p.y + 30 }, .idx = i, .gatePin = true };
+            if (c.gates[i].isSingleInput()) {
+                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 20 }, 10))
+                    return { .pos = { p.x, p.y + 20 }, .idx = i };
+            } else {
+                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 10 }, 10))
+                    return { .pos = { p.x, p.y + 10 }, .idx = i };
+                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 30 }, 10))
+                    return { .pos = { p.x, p.y + 30 }, .idx = i, .gatePin = true };
+            }
             if (CheckCollisionPointCircle(mouse, { p.x + 60, p.y + 20 }, 10))
                 return { .pos = { p.x + 60, p.y + 20 }, .idx = i, .isOut = true };
-        }
+            }
         for (int i = 0; i < (int)pos.switches.size(); ++i) {
             Vector2 p = { pos.switches[i].x + 40, pos.switches[i].y + 20 };
             if (CheckCollisionPointCircle(mouse, p, 10))
@@ -245,12 +250,23 @@ struct Editor {
         }
 
 
-        if (IsKeyPressed(KEY_ONE))   { pushHistory(c, pos); c.gates.push_back({});    pos.gates.push_back({ mouse.x - 30, mouse.y - 20 }); }
-        if (IsKeyPressed(KEY_TWO))   { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
-        if (IsKeyPressed(KEY_THREE)) { pushHistory(c, pos); c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        auto spawnGate = [&](GateType t) {
+            pushHistory(c, pos);
+            c.gates.push_back({ .type = t });
+            pos.gates.push_back({ mouse.x - 30, mouse.y - 20 });
+        };
+
+        if (!ctrl) {
+            if (IsKeyPressed(KEY_Q))   spawnGate(GateType::AND);
+            if (IsKeyPressed(KEY_W))   spawnGate(GateType::OR);
+            if (IsKeyPressed(KEY_E))   spawnGate(GateType::XOR);
+            if (IsKeyPressed(KEY_R))   spawnGate(GateType::NOT);
+            if (IsKeyPressed(KEY_ONE)) { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
+            if (IsKeyPressed(KEY_TWO)) { pushHistory(c, pos); c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            PinHit hit = findPin(mouse, pos);
+            PinHit hit = findPin(mouse, c, pos);
             if (!wireStart && shift && hit) {
                 wireStart = hit;
                 return false;
@@ -353,13 +369,13 @@ struct Editor {
         return false;
     }
 
-    void draw(const Layout& pos) {
+    void draw(const Circuit& c, const Layout& pos) {
         if (isSelecting) {
             DrawRectangleRec(selectBox, Fade(SKYBLUE, 0.2f));
             DrawRectangleLinesEx(selectBox, 1.5f, SKYBLUE);
         }
         Vector2 m = GetScreenToWorld2D(GetMousePosition(), camera);
-        PinHit hover = findPin(m, pos);
+        PinHit hover = findPin(m, c, pos);
 
         if (hover && (wireStart || IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
             DrawCircleLinesV(hover.pos, 7.0f, RAYWHITE);
