@@ -160,7 +160,11 @@ struct Editor {
             for (int i : selection.leds)     { center = Vector2Add(center, pos.leds[i]);     total++; }
             center = Vector2Scale(center, 1.0f / total);
 
-            for (int i : selection.gates)    clipboard.gates.push_back(Vector2Subtract(pos.gates[i], center));
+
+            for (int i : selection.gates) {
+                clipboard.gates.push_back(Vector2Subtract(pos.gates[i], center));
+                clipboard.gateTypes.push_back(c.gates[i].type);
+            }
             for (int i : selection.switches) clipboard.switches.push_back(Vector2Subtract(pos.switches[i], center));
             for (int i : selection.leds)     clipboard.leds.push_back(Vector2Subtract(pos.leds[i], center));
 
@@ -194,8 +198,11 @@ struct Editor {
                     posList.push_back(Vector2Add(mouse, rel));
                 }
             };
-
-            paste(clipboard.gates,    selection.gates,    c.gates,    pos.gates);
+            
+            paste(clipboard.gates, selection.gates, c.gates, pos.gates);
+            for (size_t i = 0; i < clipboard.gateTypes.size(); ++i) {
+                c.gates[baseGate + i].type = clipboard.gateTypes[i];
+            }
             paste(clipboard.switches, selection.switches, c.switches, pos.switches);
             paste(clipboard.leds,     selection.leds,     c.leds,     pos.leds);
 

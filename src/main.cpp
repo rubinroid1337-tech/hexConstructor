@@ -5,7 +5,6 @@
 #include "core/save.hpp"
 
 int main() {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(800, 450, "hex constructor");
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
@@ -43,5 +42,4 @@ int main() {
     saveFile(circuit, layout, "save.json");
 
     CloseWindow();
-    return 0;
 }
