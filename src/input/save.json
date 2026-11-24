@@ -1,0 +1,13 @@
+{
+    "circuit": {
+        "gates": [],
+        "leds": [],
+        "switches": [],
+        "wires": []
+    },
+    "layout": {
+        "gates": [],
+        "leds": [],
+        "switches": []
+    }
+}

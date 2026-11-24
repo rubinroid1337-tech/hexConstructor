@@ -37,7 +37,7 @@ struct Editor {
     std::vector<Snapshot> redoStack;
 
     void pushHistory(const Circuit& c, const Layout& pos) {
-        if (undoStack.size() >= 100) undoStack.erase(undoStack.begin()); // лимит 100 шагов
+        if (undoStack.size() >= 100) undoStack.erase(undoStack.begin());
         undoStack.push_back({ c, pos });
         redoStack.clear();
     }
@@ -63,50 +63,39 @@ struct Editor {
     }
 
     PinHit findPin(Vector2 mouse, const Circuit& c, const Layout& pos) {
-        auto hit = [&](Vector2 pt, PinHit res) -> bool {
+        PinHit res{};
+        auto hit = [&](Vector2 pt, PinHit cand) {
             if (!CheckCollisionPointCircle(mouse, pt, 10)) return false;
+            res = cand;
             res.pos = pt;
             return true;
         };
 
         for (int i = 0; i < (int)pos.gates.size(); ++i) {
-            Vector2 p = pos.gates[i];
+            auto [x, y] = pos.gates[i];
+            if (hit({x + 60, y + 20}, {.idx = i, .isOut = true})) return res;
             if (c.gates[i].isSingleInput()) {
-                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 20 }, 10))
-                    return { .pos = { p.x, p.y + 20 }, .idx = i };
+                if (hit({x, y + 20}, {.idx = i})) return res;
             } else {
-                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 10 }, 10))
-                    return { .pos = { p.x, p.y + 10 }, .idx = i };
-                if (CheckCollisionPointCircle(mouse, { p.x, p.y + 30 }, 10))
-                    return { .pos = { p.x, p.y + 30 }, .idx = i, .gatePin = true };
+                if (hit({x, y + 10}, {.idx = i})) return res;
+                if (hit({x, y + 30}, {.idx = i, .gatePin = true})) return res;
             }
-            if (CheckCollisionPointCircle(mouse, { p.x + 60, p.y + 20 }, 10))
-                return { .pos = { p.x + 60, p.y + 20 }, .idx = i, .isOut = true };
-            }
-        for (int i = 0; i < (int)pos.switches.size(); ++i) {
-            Vector2 p = { pos.switches[i].x + 40, pos.switches[i].y + 20 };
-            if (CheckCollisionPointCircle(mouse, p, 10))
-                return { .pos = p, .idx = i, .type = SWITCH, .isOut = true };
         }
-        for (int i = 0; i < (int)pos.leds.size(); ++i) {
-            Vector2 p = { pos.leds[i].x, pos.leds[i].y + 20 };
-            if (CheckCollisionPointCircle(mouse, p, 10))
-                return { .pos = p, .idx = i, .type = LED };
-        }
+
+        for (int i = 0; i < (int)pos.switches.size(); ++i)
+            if (hit({pos.switches[i].x + 40, pos.switches[i].y + 20}, {.idx = i, .type = SWITCH, .isOut = true})) return res;
+
+        for (int i = 0; i < (int)pos.leds.size(); ++i)
+            if (hit({pos.leds[i].x, pos.leds[i].y + 20}, {.idx = i, .type = LED})) return res;
+
         return {};
     }
 
     bool isMouseOverWire(Vector2 mouse, Vector2 start, Vector2 end) {
-        float offset = std::max(std::abs(end.x - start.x) * 0.5f, 40.0f);
-        Vector2 c1 = { start.x + offset, start.y };
-        Vector2 c2 = { end.x - offset, end.y };
-        Vector2 prev = start;
+        float off = fmaxf(fabsf(end.x - start.x) * 0.5f, 40.0f);
+        Vector2 c1 = { start.x + off, start.y }, c2 = { end.x - off, end.y }, prev = start;
         for (int s = 1; s <= 16; ++s) {
-            float t = s / 16.0f, u = 1.0f - t;
-            Vector2 curr = {
-                u*u*u*start.x + 3*u*u*t*c1.x + 3*u*t*t*c2.x + t*t*t*end.x,
-                u*u*u*start.y + 3*u*u*t*c1.y + 3*u*t*t*c2.y + t*t*t*end.y
-            };
+            Vector2 curr = GetSplinePointBezierCubic(start, end, c1, c2, s / 16.0f);
             if (CheckCollisionPointLine(mouse, prev, curr, 8)) return true;
             prev = curr;
         }
@@ -114,18 +103,18 @@ struct Editor {
     }
 
     void deleteNode(Circuit& c, Layout& pos, Kind type, int idx) {
-        for (int i = (int)c.wires.size() - 1; i >= 0; --i) {
-            auto& w = c.wires[i];
-            if ((w.fromType == type && w.from == idx) || (w.toType == type && w.to == idx)) {
+        auto upd = [&](Kind k, int& id) {
+            if (k == type && id > idx) id--;
+            return k == type && id == idx;
+        };
+        for (int i = (int)c.wires.size() - 1; i >= 0; --i)
+            if (upd(c.wires[i].fromType, c.wires[i].from) || upd(c.wires[i].toType, c.wires[i].to))
                 c.wires.erase(c.wires.begin() + i);
-            } else {
-                if (w.fromType == type && w.from > idx) w.from--;
-                if (w.toType == type && w.to > idx) w.to--;
-            }
-        }
-        if (type == GATE)        { c.gates.erase(c.gates.begin() + idx);       pos.gates.erase(pos.gates.begin() + idx); }
-        else if (type == SWITCH) { c.switches.erase(c.switches.begin() + idx); pos.switches.erase(pos.switches.begin() + idx); }
-        else if (type == LED)    { c.leds.erase(c.leds.begin() + idx);         pos.leds.erase(pos.leds.begin() + idx); }
+
+        auto rem = [&](auto& a, auto& b) { a.erase(a.begin() + idx); b.erase(b.begin() + idx); };
+        if (type == GATE)        rem(c.gates, pos.gates);
+        else if (type == SWITCH) rem(c.switches, pos.switches);
+        else if (type == LED)    rem(c.leds, pos.leds);
         wireStart = {};
     }
 
@@ -149,17 +138,16 @@ struct Editor {
             return false;
         }
 
-
         if (ctrl && IsKeyPressed(KEY_C) && !selection.empty()) {
             clipboard = {};
             Vector2 center{};
-            int total = 0;
-
-            for (int i : selection.gates)    { center = Vector2Add(center, pos.gates[i]);    total++; }
-            for (int i : selection.switches) { center = Vector2Add(center, pos.switches[i]); total++; }
-            for (int i : selection.leds)     { center = Vector2Add(center, pos.leds[i]);     total++; }
-            center = Vector2Scale(center, 1.0f / total);
-
+            auto sum = [&](const auto& sel, const auto& pts) {
+                for (int i : sel) center = Vector2Add(center, pts[i]);
+            };
+            sum(selection.gates, pos.gates);
+            sum(selection.switches, pos.switches);
+            sum(selection.leds, pos.leds);
+            center = Vector2Scale(center, 1.0f / (selection.gates.size() + selection.switches.size() + selection.leds.size()));
 
             for (int i : selection.gates) {
                 clipboard.gates.push_back(Vector2Subtract(pos.gates[i], center));
@@ -168,55 +156,36 @@ struct Editor {
             for (int i : selection.switches) clipboard.switches.push_back(Vector2Subtract(pos.switches[i], center));
             for (int i : selection.leds)     clipboard.leds.push_back(Vector2Subtract(pos.leds[i], center));
 
-            auto findLocalIdx = [&](Kind type, int oldIdx) -> int {
-                const auto& list = (type == GATE) ? selection.gates : (type == SWITCH ? selection.switches : selection.leds);
-                auto it = std::find(list.begin(), list.end(), oldIdx);
-                return (it != list.end()) ? (int)std::distance(list.begin(), it) : -1;
+            auto localIdx = [&](Kind k, int id) {
+                const auto& v = (k == GATE) ? selection.gates : (k == SWITCH ? selection.switches : selection.leds);
+                for (int i = 0; i < (int)v.size(); ++i) if (v[i] == id) return i;
+                return -1;
             };
-
-            for (const auto& w : c.wires) {
-                int newFrom = findLocalIdx(w.fromType, w.from);
-                int newTo   = findLocalIdx(w.toType, w.to);
-                if (newFrom != -1 && newTo != -1) {
-                    clipboard.wires.push_back({ newFrom, newTo, w.fromType, w.toType, w.pin, false });
-                }
-            }
+            for (const auto& w : c.wires)
+                if (int a = localIdx(w.fromType, w.from), b = localIdx(w.toType, w.to); a != -1 && b != -1)
+                    clipboard.wires.push_back({ a, b, w.fromType, w.toType, w.pin, false });
         }
 
         if (ctrl && IsKeyPressed(KEY_V) && !clipboard.empty()) {
             pushHistory(c, pos);
             selection.clear();
 
-            int baseGate   = (int)c.gates.size();
-            int baseSwitch = (int)c.switches.size();
-            int baseLed    = (int)c.leds.size();
-
-            auto paste = [&](const auto& clipList, auto& selList, auto& cList, auto& posList) {
-                for (const auto& rel : clipList) {
-                    selList.push_back((int)cList.size());
-                    cList.push_back({});
-                    posList.push_back(Vector2Add(mouse, rel));
+            int base[3] = { (int)c.gates.size(), (int)c.switches.size(), (int)c.leds.size() };
+            auto paste = [&](const auto& src, auto& sel, auto& dst, auto& pts) {
+                for (Vector2 rel : src) {
+                    sel.push_back((int)dst.size());
+                    dst.push_back({});
+                    pts.push_back(Vector2Add(mouse, rel));
                 }
             };
-            
-            paste(clipboard.gates, selection.gates, c.gates, pos.gates);
-            for (size_t i = 0; i < clipboard.gateTypes.size(); ++i) {
-                c.gates[baseGate + i].type = clipboard.gateTypes[i];
-            }
+            paste(clipboard.gates,    selection.gates,    c.gates,    pos.gates);
             paste(clipboard.switches, selection.switches, c.switches, pos.switches);
             paste(clipboard.leds,     selection.leds,     c.leds,     pos.leds);
+            for (size_t i = 0; i < clipboard.gateTypes.size(); ++i)
+                c.gates[base[GATE] + i].type = clipboard.gateTypes[i];
 
-            auto getBase = [&](Kind type) {
-                if (type == GATE)   return baseGate;
-                if (type == SWITCH) return baseSwitch;
-                return baseLed;
-            };
-
-            for (auto w : clipboard.wires) {
-                w.from += getBase(w.fromType);
-                w.to   += getBase(w.toType);
-                c.wires.push_back(w);
-            }
+            for (auto w : clipboard.wires)
+                c.wires.push_back({ w.from + base[w.fromType], w.to + base[w.toType], w.fromType, w.toType, w.pin, false });
         }
 
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
@@ -264,92 +233,74 @@ struct Editor {
             pos.gates.push_back({ mouse.x - 30, mouse.y - 20 });
         };
 
-        if (!ctrl) {
-            if (IsKeyPressed(KEY_Q))   spawnGate(GateType::AND);
-            if (IsKeyPressed(KEY_W))   spawnGate(GateType::OR);
-            if (IsKeyPressed(KEY_E))   spawnGate(GateType::XOR);
-            if (IsKeyPressed(KEY_R))   spawnGate(GateType::NOT);
-            if (IsKeyPressed(KEY_ONE)) { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
-            if (IsKeyPressed(KEY_TWO)) { pushHistory(c, pos); c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
-        }
+        if (IsKeyPressed(KEY_Q))   spawnGate(GateType::AND);
+        if (IsKeyPressed(KEY_W))   spawnGate(GateType::OR);
+        if (IsKeyPressed(KEY_E))   spawnGate(GateType::XOR);
+        if (IsKeyPressed(KEY_R))   spawnGate(GateType::NOT);
+        if (IsKeyPressed(KEY_ONE)) { pushHistory(c, pos); c.switches.push_back({}); pos.switches.push_back({ mouse.x - 20, mouse.y - 20 }); }
+        if (IsKeyPressed(KEY_TWO)) { pushHistory(c, pos); c.leds.push_back({});     pos.leds.push_back({ mouse.x - 20, mouse.y - 20 }); }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            PinHit hit = findPin(mouse, c, pos);
-            if (!wireStart && shift && hit) {
+            if (PinHit hit = findPin(mouse, c, pos); !wireStart && shift && hit) {
                 wireStart = hit;
                 return false;
-            }
-            if (wireStart) {
-                if (hit && hit.isOut != wireStart.isOut &&
-                    !(hit.type == wireStart.type && hit.idx == wireStart.idx)) {
+            } else if (wireStart) {
+                if (hit && hit.isOut != wireStart.isOut && !(hit.type == wireStart.type && hit.idx == wireStart.idx)) {
                     pushHistory(c, pos);
-                    PinHit outPin = wireStart.isOut ? wireStart : hit;
-                    PinHit inPin  = wireStart.isOut ? hit : wireStart;
+                    PinHit outPin = wireStart.isOut ? wireStart : hit, inPin = wireStart.isOut ? hit : wireStart;
                     c.wires.push_back({ outPin.idx, inPin.idx, outPin.type, inPin.type, inPin.gatePin, false });
                 }
                 wireStart = {};
                 return false;
             }
-        }
 
-        if (!wireStart && !space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            clickStartWorld = mouse;
-            dragLastWorld = mouse;
+            if (!space) {
+                clickStartWorld = dragLastWorld = mouse;
+                Kind hitType = GATE;
+                int hitIdx = -1;
+                auto checkHit = [&](const auto& list, Kind type, float w, float h) {
+                    for (int i = (int)list.size() - 1; i >= 0; --i)
+                        if (CheckCollisionPointRec(mouse, { list[i].x, list[i].y, w, h }))
+                            return hitType = type, hitIdx = i, true;
+                    return false;
+                };
 
-            Kind hitType = GATE;
-            int hitIdx = -1;
-
-            auto checkHit = [&](const std::vector<Vector2>& list, Kind type, float w, float h) {
-                for (int i = (int)list.size() - 1; i >= 0; --i) {
-                    if (CheckCollisionPointRec(mouse, { list[i].x, list[i].y, w, h })) {
-                        hitType = type; hitIdx = i; return true;
+                if (checkHit(pos.gates, GATE, 60, 40) || checkHit(pos.switches, SWITCH, 40, 40) || checkHit(pos.leds, LED, 40, 40)) {
+                    pushHistory(c, pos);
+                    isDragging = true;
+                    if (isSingleDrag = !selection.has(hitType, hitIdx); isSingleDrag) {
+                        selection.clear();
+                        (hitType == GATE ? selection.gates : (hitType == SWITCH ? selection.switches : selection.leds)).push_back(hitIdx);
                     }
-                }
-                return false;
-            };
-            if (checkHit(pos.gates, GATE, 60, 40) || checkHit(pos.switches, SWITCH, 40, 40) || checkHit(pos.leds, LED, 40, 40)) {
-                pushHistory(c, pos);
-                isDragging = true;
-                if (!selection.has(hitType, hitIdx)) {
-                    selection.clear();
-                    if (hitType == GATE)        selection.gates.push_back(hitIdx);
-                    else if (hitType == SWITCH) selection.switches.push_back(hitIdx);
-                    else if (hitType == LED)    selection.leds.push_back(hitIdx);
-                    isSingleDrag = true;
                 } else {
+                    selection.clear();
+                    isSelecting = true;
                     isSingleDrag = false;
+                    selectStart = mouse;
+                    selectBox = { mouse.x, mouse.y, 0, 0 };
                 }
-            } else {
-                selection.clear();
-                isSelecting = true;
-                isSingleDrag = false;
-                selectStart = mouse;
-                selectBox = { mouse.x, mouse.y, 0, 0 };
             }
         }
 
-        if (isDragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 delta = Vector2Subtract(mouse, dragLastWorld);
-            for (int idx : selection.gates)    pos.gates[idx]    = Vector2Add(pos.gates[idx], delta);
-            for (int idx : selection.switches) pos.switches[idx] = Vector2Add(pos.switches[idx], delta);
-            for (int idx : selection.leds)     pos.leds[idx]     = Vector2Add(pos.leds[idx], delta);
-            dragLastWorld = mouse;
-        }
-
-        if (isSelecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            selectBox = {
-                std::min(selectStart.x, mouse.x),
-                std::min(selectStart.y, mouse.y),
-                std::abs(mouse.x - selectStart.x),
-                std::abs(mouse.y - selectStart.y)
-            };
-            selection.clear();
-            for (int i = 0; i < (int)pos.gates.size(); ++i)
-                if (CheckCollisionRecs(selectBox, { pos.gates[i].x, pos.gates[i].y, 60, 40 })) selection.gates.push_back(i);
-            for (int i = 0; i < (int)pos.switches.size(); ++i)
-                if (CheckCollisionRecs(selectBox, { pos.switches[i].x, pos.switches[i].y, 40, 40 })) selection.switches.push_back(i);
-            for (int i = 0; i < (int)pos.leds.size(); ++i)
-                if (CheckCollisionRecs(selectBox, { pos.leds[i].x, pos.leds[i].y, 40, 40 })) selection.leds.push_back(i);
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            if (isDragging) {
+                Vector2 delta = Vector2Subtract(mouse, dragLastWorld);
+                auto move = [&](const auto& sel, auto& pts) { for (int i : sel) pts[i] = Vector2Add(pts[i], delta); };
+                move(selection.gates, pos.gates);
+                move(selection.switches, pos.switches);
+                move(selection.leds, pos.leds);
+                dragLastWorld = mouse;
+            } else if (isSelecting) {
+                selectBox = { fminf(selectStart.x, mouse.x), fminf(selectStart.y, mouse.y), fabsf(mouse.x - selectStart.x), fabsf(mouse.y - selectStart.y) };
+                selection.clear();
+                auto boxSel = [&](const auto& pts, auto& sel, float w, float h) {
+                    for (int i = 0; i < (int)pts.size(); ++i)
+                        if (CheckCollisionRecs(selectBox, { pts[i].x, pts[i].y, w, h })) sel.push_back(i);
+                };
+                boxSel(pos.gates, selection.gates, 60, 40);
+                boxSel(pos.switches, selection.switches, 40, 40);
+                boxSel(pos.leds, selection.leds, 40, 40);
+            }
         }
 
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
