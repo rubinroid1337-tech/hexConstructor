@@ -2,9 +2,13 @@
 #include <string>
 
 #include "core/circuit.hpp"
+#include "core/gate.hpp"
+#include "core/switch.hpp"
+#include "core/led.hpp"
+#include "core/save.hpp"
 #include "render/circuit-render.hpp"
 #include "input/editor.hpp"
-#include "core/save.hpp"
+#include "input/context-menu.hpp"
 
 enum class AppState { MENU, EDITOR };
 
@@ -23,10 +27,46 @@ int main() {
     Layout layout;
     Editor editor;
     SaveManager saveManager("saves", 10.0f);
+    ContextMenu contextMenu;
+
+    // Вспомогательная функция для получения мировых координат клика
+    auto getSpawnPos = [&]() -> Vector2 {
+        return GetScreenToWorld2D(contextMenu.getOpenPosition(), editor.camera);
+    };
+
+    // Вентили (без NAND)
+    constexpr GateType availableGates[] = {
+        GateType::XOR,
+        GateType::OR,
+        GateType::AND,
+        GateType::NOT
+    };
+
+    for (GateType type : availableGates) {
+        contextMenu.addButton(Gate{ .type = type }.label(), [&, type]() {
+            circuit.gates.push_back(Gate{ .type = type });
+            layout.gates.push_back(getSpawnPos());
+        });
+    }
+
+    // Разделитель между вентилями и элементами ввода/вывода
+    contextMenu.addSeparator();
+
+    // Switch и Led
+    contextMenu.addButton("SWITCH", [&]() {
+        circuit.switches.push_back(Switch{ .on = false });
+        layout.switches.push_back(getSpawnPos());
+    });
+
+    contextMenu.addButton("LED", [&]() {
+        circuit.leds.push_back(Led{ .on = false });
+        layout.leds.push_back(getSpawnPos());
+    });
 
     std::string inputName;
 
     while (!WindowShouldClose()) {
+        // ==================== ОБНОВЛЕНИЕ ЛОГИКИ ====================
         if (state == AppState::MENU) {
             int key = GetCharPressed();
             while (key > 0) {
@@ -45,19 +85,30 @@ int main() {
             }
         } 
         else if (state == AppState::EDITOR) {
-            editor.hotkeysUpdate(circuit, layout);
+            if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+                contextMenu.open(GetMousePosition());
+            }
+
+            contextMenu.update();
+
+            if (!contextMenu.isVisible()) {
+                editor.hotkeysUpdate(circuit, layout);
+
+                if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S)) {
+                    saveManager.saveCurrent(circuit, layout);
+                }
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    contextMenu.close();
+                    saveManager.closeProject(circuit, layout);
+                    state = AppState::MENU;
+                }
+            }
+
             circuit.tick();
             saveManager.updateAutoSave(GetFrameTime(), circuit, layout);
-
-            if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S)) {
-                saveManager.saveCurrent(circuit, layout);
-            }
-            if (IsKeyPressed(KEY_ESCAPE)) {
-                saveManager.closeProject(circuit, layout);
-                state = AppState::MENU;
-            }
         }
 
+        // ==================== ОТРИСОВКА ====================
         BeginDrawing();
         ClearBackground({ 30, 32, 38, 255 });
 
@@ -116,6 +167,8 @@ int main() {
                 DrawCircuit(circuit, layout, editor.selection);
                 editor.draw(circuit, layout);
             EndMode2D();
+
+            contextMenu.draw();
 
             DrawText(("Project: " + saveManager.activeName() + "  [ESC: Menu]").c_str(), 12, 12, 16, LIGHTGRAY);
         }
