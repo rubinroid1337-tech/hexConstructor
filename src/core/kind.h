@@ -1,7 +1,7 @@
 #pragma once
 
-enum Kind : unsigned char {
+typedef enum : unsigned char {
     GATE,
     SWITCH,
     LED
-};
+} Kind;
