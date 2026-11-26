@@ -9,7 +9,7 @@ enum class GateType {
 };
 
 struct Gate {
-    GateType type = GateType::NAND;
+    GateType type = {};
     bool in[2]{ false, false };
     bool out = false;
 
