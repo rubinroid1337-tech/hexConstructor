@@ -1,11 +1,7 @@
-#pragma once
+#include "draw-wire.h"
 
-#include <raylib.h>
-
-constexpr Color DARK_RED = { 75, 12, 18, 255 };
-
-inline void DrawWire(Vector2 start, Vector2 end, bool on) {
-    float offset = std::max(std::abs(end.x - start.x) * 0.5f, 40.0f);
+void DrawWire(Vector2 start, Vector2 end, bool on) {
+    float offset = fmaxf(fabsf(end.x - start.x) * 0.5f, 40.0f);
     Vector2 pts[4] = {
         start,
         { start.x + offset, start.y },
