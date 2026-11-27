@@ -177,13 +177,13 @@ bool hotkeys_update(Editor *ed, Circuit *c, Layout *pos) {
         return true;
     }
 
-    if (space && IsMouseButtonPressed(KEY_LEFT)) {
+    if (space && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         ed->isPanning = true;
         ed->panLastMouse = screenMouse;
         return false;
     }
     if (ed->isPanning) {
-        if (IsMouseButtonDown(KEY_LEFT)) {
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             Vector2 delta = Vector2Subtract(screenMouse, ed->panLastMouse);
             ed->camera.target = Vector2Subtract(ed->camera.target, Vector2Scale(delta, 1.0f / ed->camera.zoom));
             ed->panLastMouse = screenMouse;
